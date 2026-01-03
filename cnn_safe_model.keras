@@ -1,1 +1,2 @@
+model.save("cnn_safe_model.keras")
 

@@ -9,3 +9,4 @@ tqdm
 joblib
 scipy>=1.7.0
 pytest
+requests

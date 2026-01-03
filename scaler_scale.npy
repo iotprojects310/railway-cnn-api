@@ -1,2 +1,2 @@
-np.save("scaler_scale.npy", scaler.scale_)
+
 

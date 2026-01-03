@@ -58,13 +58,28 @@ def main():
     parser.add_argument('--checkpoint', default='checkpoints')
     parser.add_argument('--window', type=int, default=128)
     parser.add_argument('--stride', type=int, default=64)
-    parser.add_argument('--out_csv', default='supabase_classification.csv')
+    parser.add_argument('--out_csv', default='supabase_classification1.csv', help='output CSV')
+    parser.add_argument('--watch', action='store_true', help='If set, poll the table periodically and update CSV when changes are detected')
+    parser.add_argument('--interval', type=int, default=60, help='Polling interval in seconds when --watch is used')
     parser.add_argument('--update', action='store_true', help='If set, update table with safety class in column "safety_class"')
     parser.add_argument('--device', default='cpu')
     args = parser.parse_args()
 
     if not args.supabase_url or not args.api_key:
         raise SystemExit('Supabase URL and API key must be provided via args or SUPABASE_URL/SUPABASE_KEY env vars')
+
+    if args.watch:
+        # initial fetch to seed the hash and run first classification
+        rows = fetch_table_rows(args.supabase_url, args.api_key, args.table)
+        if not rows:
+            print('No rows returned from table.')
+            return
+        df = pd.DataFrame(rows)
+        classify_and_write(df, args)
+        prev_hash = df_hash(df)
+        print(f'Starting watch loop (interval={args.interval}s)')
+        watch_loop(args, prev_hash=prev_hash)
+        return
 
     print('Fetching rows from Supabase...')
     rows = fetch_table_rows(args.supabase_url, args.api_key, args.table)
@@ -90,9 +105,13 @@ def main():
     model, scaler, thresh = load_model_and_meta(checkpoint_dir=args.checkpoint, device=args.device)
 
     print('Classifying series with model...')
-    _, per_window_err, sample_flags = classify_series(arr, model, scaler, thresh,
-                                                     window=args.window, stride=args.stride,
-                                                     device=args.device)
+    try:
+        _, per_window_err, sample_flags = classify_series(arr, model, scaler, thresh,
+                                                         window=args.window, stride=args.stride,
+                                                         device=args.device)
+    except ValueError as e:
+        print(f'Warning: {e}; marking all samples as safe')
+        sample_flags = np.zeros(arr.shape[0], dtype=bool)
 
     df['unsafe'] = sample_flags.astype(int)
     df['safety_class'] = df['unsafe'].map({0: 'Class 1', 1: 'Class 2'})
@@ -115,6 +134,77 @@ def main():
             except Exception as e:
                 print(f'Failed to update row {row[pk]}: {e}')
         print('Update complete.')
+
+
+def df_hash(df):
+    """Return a short hash of the dataframe contents (stable for same rows)."""
+    import hashlib
+    # Sort columns and rows for determinism
+    df2 = df.copy()
+    df2 = df2.sort_index(axis=1)
+    # Use records json for consistent ordering
+    s = df2.to_json(orient='records', date_format='iso')
+    return hashlib.sha256(s.encode('utf-8')).hexdigest()[:16]
+
+
+def watch_loop(args, prev_hash=None):
+    import time
+    while True:
+        rows = fetch_table_rows(args.supabase_url, args.api_key, args.table)
+        df = pd.DataFrame(rows)
+        cur_hash = df_hash(df)
+        if cur_hash != prev_hash:
+            print('Change detected in table, re-classifying...')
+            classify_and_write(df, args)
+            prev_hash = cur_hash
+        else:
+            print('No change detected, sleeping...')
+        time.sleep(args.interval)
+
+
+def classify_and_write(df, args):
+    needed = ['AccX', 'AccY', 'AccZ']
+    if not all(c in df.columns for c in needed):
+        print(f"Skipping classification: table must contain columns: {needed}. Found: {list(df.columns)}")
+        return
+
+    pk = determine_pk(df)
+    if pk:
+        df = df.sort_values(by=pk).reset_index(drop=True)
+    else:
+        df = df.reset_index(drop=True)
+
+    arr = df[['AccX', 'AccY', 'AccZ']].astype(float).values
+
+    model, scaler, thresh = load_model_and_meta(checkpoint_dir=args.checkpoint, device=args.device)
+
+    # handle short series
+    try:
+        _, per_window_err, sample_flags = classify_series(arr, model, scaler, thresh, window=args.window, stride=args.stride, device=args.device)
+    except ValueError as e:
+        # If too short to create windows, mark all safe
+        print(f'Warning: {e}; marking all rows as Class 1 (safe)')
+        sample_flags = np.zeros(arr.shape[0], dtype=bool)
+
+    df['unsafe'] = sample_flags.astype(int)
+    df['safety_class'] = df['unsafe'].map({0: 'Class 1', 1: 'Class 2'})
+
+    df.to_csv(args.out_csv, index=False)
+    print(f'Wrote results to {args.out_csv}')
+
+    if args.update:
+        if pk is None:
+            print('Cannot update table without unique integer primary key; skipping updates')
+            return
+        print('Updating rows on Supabase (safety_class column) ...')
+        for _, row in df.iterrows():
+            payload = {'safety_class': row['safety_class']}
+            try:
+                update_row_class(args.supabase_url, args.api_key, args.table, pk, row[pk], payload)
+            except Exception as e:
+                print(f'Failed to update row {row[pk]}: {e}')
+        print('Update complete.')
+
 
 
 if __name__ == '__main__':

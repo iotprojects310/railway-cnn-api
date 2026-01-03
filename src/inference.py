@@ -12,7 +12,8 @@ def load_model_and_meta(checkpoint_dir='checkpoints', device='cpu'):
     model.to(device)
     model.eval()
     scaler = load_scaler(os.path.join(checkpoint_dir, 'scaler.joblib'))
-    thresh = float(np.load(os.path.join(checkpoint_dir, 'threshold.npy')))
+    thresh_arr = np.load(os.path.join(checkpoint_dir, 'threshold.npy'))
+    thresh = float(thresh_arr.item() if hasattr(thresh_arr, 'item') else thresh_arr)
     return model, scaler, thresh
 
 

@@ -38,3 +38,22 @@ Notes
 
 - The training script saves `best_model.pth`, `scaler.joblib`, `val_errors.npy`, and `threshold.npy` in the output directory.
 - Threshold selection uses the 99th percentile by default; tune `--threshold_pct` as needed.
+
+Supabase classification script
+
+The `scripts/classify_supabase.py` script can fetch rows from a Supabase table and classify each row as **Class 1 (safe)** or **Class 2 (unsafe)**. It writes results to a CSV (default `supabase_classification1.csv`).
+
+Usage examples:
+
+```bash
+# Single run and write results to supabase_classification1.csv
+export SUPABASE_URL="https://<your-project>.supabase.co"
+export SUPABASE_KEY="<service-key>"
+export PYTHONPATH=.
+python scripts/classify_supabase.py --table sensor_data --checkpoint checkpoints --out_csv supabase_classification1.csv
+
+# Run in watch mode: poll the table and rewrite CSV when changes are detected
+python scripts/classify_supabase.py --table sensor_data --checkpoint checkpoints --watch --interval 60
+```
+
+The script also supports `--update` which will write the `safety_class` back into the table per-row (requires a unique integer primary key column such as `id`).

@@ -29,6 +29,9 @@ def train(args):
 
     train_w, val_w = split_windows(windows, val_frac=args.val_frac)
 
+    # ensure output directory exists before saving any metadata
+    os.makedirs(args.outdir, exist_ok=True)
+
     scaler = fit_channel_scaler(train_w)
     save_scaler(scaler, os.path.join(args.outdir, 'scaler.joblib'))
     train_w = scale_windows(train_w, scaler)

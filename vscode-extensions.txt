@@ -1,0 +1,7 @@
+Extensions installed on Codespaces: redesigned enigma:
+github.codespaces
+github.copilot
+github.copilot-chat
+github.github-vscode-theme
+github.vscode-pull-request-github
+mechatroner.rainbow-csv

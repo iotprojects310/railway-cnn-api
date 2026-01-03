@@ -63,6 +63,8 @@ def main():
     parser.add_argument('--interval', type=int, default=5, help='Polling interval in seconds when --watch is used')
     parser.add_argument('--update', action='store_true', help='If set, update table with safety class in column "safety_class"')
     parser.add_argument('--device', default='cpu')
+    parser.add_argument('--post_url', default=None, help='Optional: POST JSON classification results to this URL')
+    parser.add_argument('--post_token', default=None, help='Optional: Bearer token used when POSTing to --post_url')
     args = parser.parse_args()
 
     if not args.supabase_url or not args.api_key:
@@ -191,6 +193,23 @@ def classify_and_write(df, args):
 
     df.to_csv(args.out_csv, index=False)
     print(f'Wrote results to {args.out_csv}')
+
+    # Optionally POST JSON directly to an endpoint (no CSV required)
+    if args.post_url:
+        print(f"Posting classification JSON to {args.post_url} ...")
+        payload = {
+            'last_updated': pd.Timestamp.now().isoformat(),
+            'rows': df.to_dict(orient='records')
+        }
+        headers = {'Content-Type': 'application/json'}
+        if args.post_token:
+            headers['Authorization'] = f'Bearer {args.post_token}'
+        try:
+            r = requests.post(args.post_url, json=payload, headers=headers, timeout=10)
+            r.raise_for_status()
+            print('Post successful:', r.status_code)
+        except Exception as e:
+            print('Failed to POST results:', e)
 
     if args.update:
         if pk is None:

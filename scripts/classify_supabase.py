@@ -60,7 +60,7 @@ def main():
     parser.add_argument('--stride', type=int, default=64)
     parser.add_argument('--out_csv', default='supabase_classification1.csv', help='output CSV')
     parser.add_argument('--watch', action='store_true', help='If set, poll the table periodically and update CSV when changes are detected')
-    parser.add_argument('--interval', type=int, default=60, help='Polling interval in seconds when --watch is used')
+    parser.add_argument('--interval', type=int, default=5, help='Polling interval in seconds when --watch is used')
     parser.add_argument('--update', action='store_true', help='If set, update table with safety class in column "safety_class"')
     parser.add_argument('--device', default='cpu')
     args = parser.parse_args()

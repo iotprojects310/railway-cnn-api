@@ -53,7 +53,7 @@ export PYTHONPATH=.
 python scripts/classify_supabase.py --table sensor_data --checkpoint checkpoints --out_csv supabase_classification1.csv
 
 # Run in watch mode: poll the table and rewrite CSV when changes are detected
-python scripts/classify_supabase.py --table sensor_data --checkpoint checkpoints --watch --interval 60
+python scripts/classify_supabase.py --table sensor_data --checkpoint checkpoints --watch --interval 5
 ```
 
 The script also supports `--update` which will write the `safety_class` back into the table per-row (requires a unique integer primary key column such as `id`).
